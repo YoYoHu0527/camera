@@ -3,127 +3,581 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>摄像头授权与拍照测试</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="theme-color" content="#07111f" />
+    <meta name="description" content="不上传数据的摄像头权限钓鱼反诈分析实验室。" />
+    <title>镜鉴实验室｜摄像头权限钓鱼分析</title>
     <style>
       :root {
-        color: #172033;
-        background: #f8fafc;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color-scheme: dark;
+        --ink: #edf7ff;
+        --muted: #a9bbcd;
+        --line: rgba(151, 180, 207, 0.17);
+        --panel: rgba(10, 25, 42, 0.82);
+        --cyan: #68e4ff;
+        --mint: #70f0bd;
+        --amber: #ffc66d;
+        --red: #ff9096;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       * { box-sizing: border-box; }
-
+      html { scroll-behavior: smooth; }
       body {
-        width: min(100%, 720px);
+        min-width: 320px;
         min-height: 100svh;
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 6%, rgba(57, 120, 255, 0.2), transparent 28rem),
+          radial-gradient(circle at 88% 30%, rgba(0, 212, 180, 0.12), transparent 26rem),
+          #07111f;
+      }
+      body::before {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        content: "";
+        opacity: 0.25;
+        background-image:
+          linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+        background-size: 40px 40px;
+        mask-image: linear-gradient(to bottom, black, transparent 88%);
+      }
+      button, input { font: inherit; }
+      button { color: inherit; }
+      a { color: inherit; }
+      [hidden] { display: none !important; }
+
+      .safety-strip {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        padding: 9px max(16px, env(safe-area-inset-right)) 9px max(16px, env(safe-area-inset-left));
+        border-bottom: 1px solid rgba(112, 240, 189, 0.25);
+        color: #d8fff1;
+        background: rgba(5, 25, 28, 0.92);
+        backdrop-filter: blur(16px);
+        font-size: 13px;
+        text-align: center;
+      }
+      .safety-strip strong { color: var(--mint); }
+      .shell {
+        width: min(1120px, 100%);
         margin: 0 auto;
-        padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+        padding: 0 max(20px, env(safe-area-inset-right)) max(72px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
       }
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 74px;
+      }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 850; letter-spacing: .03em; }
+      .brand-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border: 1px solid rgba(104, 228, 255, .4);
+        border-radius: 10px;
+        color: var(--cyan);
+        background: rgba(104, 228, 255, .08);
+      }
+      .nav-link { color: var(--muted); font-size: 14px; text-decoration: none; }
 
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(320px, .75fr);
+        gap: clamp(34px, 7vw, 88px);
+        align-items: center;
+        padding: clamp(60px, 10vw, 112px) 0 86px;
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 20px;
+        color: var(--cyan);
+        font-size: 13px;
+        font-weight: 850;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+      }
+      .eyebrow::before { width: 22px; height: 1px; content: ""; background: currentColor; }
+      h1, h2, h3, p { overflow-wrap: anywhere; }
       h1 {
-        margin: 0 0 20px;
-        font-size: clamp(1.75rem, 8vw, 2.25rem);
-        line-height: 1.25;
-        overflow-wrap: anywhere;
+        max-width: 760px;
+        margin: 0;
+        font-size: clamp(2.6rem, 7vw, 5.8rem);
+        line-height: .99;
+        letter-spacing: -.055em;
       }
-
-      video, canvas {
-        width: 100%;
-        max-width: 560px;
-        border-radius: 12px;
-        background: #111827;
-        display: block;
-        margin: 16px auto 0;
+      .gradient-text {
+        color: transparent;
+        background: linear-gradient(110deg, #fff 4%, var(--cyan) 55%, var(--mint));
+        background-clip: text;
       }
-
-      video[hidden], canvas[hidden] {
-        display: none;
+      .hero-copy {
+        max-width: 650px;
+        margin: 25px 0 0;
+        color: var(--muted);
+        font-size: clamp(16px, 2vw, 19px);
+        line-height: 1.75;
       }
-
-      button {
-        width: 100%;
+      .hero-copy strong { color: var(--ink); }
+      .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+      .btn {
+        display: inline-grid;
         min-height: 48px;
-        border: 0;
-        border-radius: 10px;
-        padding: 12px 16px;
-        font: inherit;
-        font-size: 16px;
-        font-weight: 600;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        padding: 0 20px;
         cursor: pointer;
-        background: #155eef;
-        color: white;
+        font-weight: 800;
+        text-decoration: none;
+        transition: transform .18s ease, border-color .18s ease, background .18s ease;
       }
-
-      #status {
-        min-height: 1.5em;
-        margin: 14px 0 0;
-        color: #475467;
-        overflow-wrap: anywhere;
+      .btn:hover { transform: translateY(-2px); }
+      .btn:focus-visible, .signal:focus-visible, summary:focus-visible, .bait-button:focus-visible {
+        outline: 3px solid rgba(104, 228, 255, .42);
+        outline-offset: 3px;
       }
+      .btn:disabled { cursor: wait; opacity: .65; transform: none; }
+      .btn-primary { color: #04151b; background: linear-gradient(135deg, var(--cyan), var(--mint)); }
+      .btn-quiet { border-color: var(--line); background: rgba(255,255,255,.035); }
+      .btn-danger { border-color: rgba(255,144,150,.3); color: #ffd9dc; background: rgba(255,144,150,.1); }
 
-      .notice {
-        margin: 0 0 20px;
-        padding: 14px;
-        border-radius: 10px;
-        background: #eff8ff;
-        line-height: 1.55;
-        overflow-wrap: anywhere;
+      .terminal {
+        position: relative;
+        border: 1px solid rgba(104, 228, 255, .22);
+        border-radius: 24px;
+        background: linear-gradient(160deg, rgba(17, 42, 65, .9), rgba(6, 18, 32, .95));
+        box-shadow: var(--shadow);
+        overflow: hidden;
       }
+      .terminal-bar { display: flex; gap: 7px; padding: 17px 19px; border-bottom: 1px solid var(--line); }
+      .terminal-dot { width: 8px; height: 8px; border-radius: 50%; background: #607086; }
+      .terminal-dot:first-child { background: var(--red); }
+      .terminal-dot:nth-child(2) { background: var(--amber); }
+      .terminal-dot:nth-child(3) { background: var(--mint); }
+      .terminal-body { padding: 25px; }
+      .terminal-label { margin: 0 0 18px; color: var(--muted); font: 12px/1.4 ui-monospace, Consolas, monospace; }
+      .chain { display: grid; gap: 8px; }
+      .chain-row {
+        display: grid;
+        grid-template-columns: 34px 1fr auto;
+        gap: 12px;
+        align-items: center;
+        min-height: 54px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255,255,255,.025);
+      }
+      .chain-index {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border-radius: 8px;
+        color: var(--cyan);
+        background: rgba(104,228,255,.09);
+        font: 700 12px ui-monospace, monospace;
+      }
+      .chain-title { font-size: 14px; font-weight: 750; }
+      .chain-type { color: var(--muted); font: 11px ui-monospace, monospace; }
 
-      @media (min-width: 600px) {
-        body { padding-top: 40px; padding-bottom: 40px; }
-        button { width: auto; }
+      .section { padding: 84px 0; border-top: 1px solid var(--line); }
+      .section-heading { display: grid; grid-template-columns: .7fr 1fr; gap: 30px; margin-bottom: 38px; }
+      .section-heading h2 { margin: 0; font-size: clamp(2rem, 4vw, 3.2rem); line-height: 1.08; letter-spacing: -.035em; }
+      .section-heading p { align-self: end; max-width: 620px; margin: 0; color: var(--muted); line-height: 1.75; }
+      .lab-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
+      .lab-card, .analysis-card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+      .lab-card { overflow: hidden; }
+      .lab-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .live-badge { display: inline-flex; align-items: center; gap: 7px; color: #bfffe5; }
+      .live-badge::before { width: 7px; height: 7px; border-radius: 50%; content: ""; background: var(--mint); box-shadow: 0 0 14px var(--mint); }
+
+      .bait-panel { padding: clamp(24px, 5vw, 48px); color: #182334; background: #f4f7fb; }
+      .fake-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; color: #3358be; font-weight: 900; }
+      .fake-brand-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; color: white; background: #3b65dc; font-size: 12px; }
+      .alert-pill { display: inline-block; margin: 0 0 14px; border-radius: 999px; padding: 5px 10px; color: #912f20; background: #ffddd6; font-size: 12px; font-weight: 850; }
+      .bait-panel h3 { max-width: 540px; margin: 0; font-size: clamp(1.8rem, 4vw, 2.7rem); line-height: 1.12; letter-spacing: -.035em; }
+      .bait-panel > p { max-width: 590px; margin: 15px 0 22px; color: #526176; line-height: 1.7; }
+      .bait-facts { display: grid; gap: 8px; margin: 0 0 24px; padding: 0; list-style: none; }
+      .bait-facts li { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+      .bait-facts li::before { color: #b9422f; content: "!"; font-weight: 900; }
+      .bait-button { width: 100%; min-height: 52px; border: 0; border-radius: 12px; padding: 0 18px; color: white; background: #315ed1; cursor: pointer; font-weight: 850; }
+      .bait-button:hover { background: #244db7; }
+      .bait-button:disabled { cursor: wait; opacity: .7; }
+      .disclosure { margin: 13px 0 0 !important; color: #5e6c7e !important; font-size: 12px; text-align: center; }
+
+      .capture-stage { padding: 20px; border-top: 1px solid var(--line); }
+      .capture-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+      video, canvas { width: 100%; aspect-ratio: 4 / 3; border-radius: 14px; background: #02070d; object-fit: cover; }
+      .media-label { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+      .capture-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+      .status { min-height: 1.5em; margin: 14px 0 0; color: #c3d2e1; line-height: 1.55; }
+      .status[data-kind="success"] { color: var(--mint); }
+      .status[data-kind="error"] { color: #ffb9bd; }
+
+      .analysis-card { padding: 22px; }
+      .analysis-card h3 { margin: 0 0 18px; font-size: 17px; }
+      .log { display: grid; gap: 15px; margin: 0; }
+      .log-item { display: grid; grid-template-columns: 26px 1fr; gap: 10px; }
+      .log-icon { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; color: var(--cyan); background: rgba(104,228,255,.09); font: 800 11px ui-monospace, monospace; }
+      .log-item dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+      .log-item dd { margin: 3px 0 0; font-size: 13px; line-height: 1.55; }
+      .network-lock { margin-top: 20px; border: 1px solid rgba(112,240,189,.22); border-radius: 12px; padding: 13px; color: #c9ffea; background: rgba(112,240,189,.055); font-size: 12px; line-height: 1.55; }
+
+      .signals { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+      .signal {
+        min-height: 245px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 23px;
+        color: var(--ink);
+        background: rgba(255,255,255,.025);
+        cursor: pointer;
+        text-align: left;
+        transition: border-color .18s ease, background .18s ease, transform .18s ease;
+      }
+      .signal:hover, .signal[aria-pressed="true"] { border-color: rgba(104,228,255,.42); background: rgba(104,228,255,.055); transform: translateY(-3px); }
+      .signal-number { color: var(--cyan); font: 12px ui-monospace, monospace; }
+      .signal h3 { margin: 38px 0 8px; font-size: 20px; }
+      .signal p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+      .signal-detail { display: block; max-height: 0; margin-top: 0; color: var(--mint); font-size: 13px; line-height: 1.55; opacity: 0; overflow: hidden; transition: max-height .2s ease, opacity .2s ease, margin .2s ease; }
+      .signal[aria-pressed="true"] .signal-detail { max-height: 100px; margin-top: 13px; opacity: 1; }
+
+      .compare { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
+      .compare-card { border: 1px solid var(--line); border-radius: 18px; padding: 24px; background: rgba(255,255,255,.025); }
+      .compare-card h3 { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; }
+      .compare-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
+      .compare-card.safe .compare-dot { background: var(--mint); }
+      .compare-card ul { display: grid; gap: 10px; margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6; }
+      .compare-card strong { color: var(--ink); }
+
+      .checklist { display: grid; grid-template-columns: .8fr 1.2fr; gap: 34px; align-items: start; }
+      .rule { padding: 16px 0; border-bottom: 1px solid var(--line); }
+      .rule:first-child { padding-top: 0; }
+      .rule h3 { margin: 0 0 7px; font-size: 16px; }
+      .rule p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+      .one-line-rule { border: 1px solid rgba(255,198,109,.25); border-radius: 20px; padding: 28px; background: rgba(255,198,109,.055); }
+      .one-line-rule .eyebrow { color: var(--amber); }
+      .one-line-rule blockquote { margin: 8px 0 18px; font-size: clamp(1.55rem, 3.6vw, 2.6rem); font-weight: 850; line-height: 1.25; letter-spacing: -.03em; }
+      .one-line-rule p { margin: 0; color: #d9cbb5; line-height: 1.7; }
+
+      details { border-top: 1px solid var(--line); }
+      details:last-child { border-bottom: 1px solid var(--line); }
+      summary { padding: 18px 4px; cursor: pointer; font-weight: 750; }
+      details p { margin: -5px 4px 20px; color: var(--muted); line-height: 1.7; }
+      footer { display: flex; justify-content: space-between; gap: 22px; padding: 34px 0 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+
+      @media (max-width: 860px) {
+        .hero, .section-heading, .lab-layout, .checklist { grid-template-columns: 1fr; }
+        .hero { padding-top: 52px; }
+        .section-heading { gap: 14px; }
+        .analysis-card { box-shadow: none; }
+      }
+      @media (max-width: 620px) {
+        .nav-link { display: none; }
+        .hero { padding-bottom: 62px; }
+        .signals, .compare, .capture-grid { grid-template-columns: 1fr; }
+        .section { padding: 64px 0; }
+        .lab-meta, footer { flex-direction: column; }
+        .bait-panel { padding: 28px 20px; }
+        .safety-strip { align-items: flex-start; font-size: 12px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *, *::before, *::after { transition-duration: .01ms !important; }
       }
     </style>
   </head>
   <body>
-    <h1>摄像头授权与拍照测试</h1>
-    <p class="notice">点击按钮后，页面会请求使用前置摄像头。只有在您允许浏览器授权后，才会拍摄一张照片；照片仅显示在当前页面，不会上传。</p>
-    <button id="start" type="button">同意并开启前置摄像头</button>
-    <p id="status" role="status"></p>
-    <video id="preview" playsinline muted hidden></video>
-    <canvas id="photo" hidden></canvas>
+    <div class="safety-strip" role="note">
+      <strong>安全演示</strong>
+      <span>不收集身份信息 · 不上传照片 · 摄像头数据仅留在当前标签页</span>
+    </div>
+
+    <div class="shell">
+      <nav class="nav" aria-label="主导航">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">◉</span>镜鉴实验室</div>
+        <a class="nav-link" href="#defense">直接查看防范清单 ↓</a>
+      </nav>
+
+      <main>
+        <header class="hero">
+          <div>
+            <p class="eyebrow">Anti-fraud research / 01</p>
+            <h1>当“人脸验证”只是一个<span class="gradient-text">权限陷阱</span></h1>
+            <p class="hero-copy">
+              这是一个面向反诈技术分析的本地实验页。它复现攻击者如何借用信任、制造紧迫感，再把一次普通点击转化为摄像头权限——并在每一步揭示<strong>真正发生了什么</strong>。
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#lab">进入安全实验</a>
+              <a class="btn btn-quiet" href="#signals">拆解诱导信号</a>
+            </div>
+          </div>
+
+          <aside class="terminal" aria-label="攻击链概览">
+            <div class="terminal-bar" aria-hidden="true"><span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span></div>
+            <div class="terminal-body">
+              <p class="terminal-label">SOCIAL_ENGINEERING_CHAIN.trace</p>
+              <div class="chain">
+                <div class="chain-row"><span class="chain-index">01</span><span class="chain-title">建立可信场景</span><span class="chain-type">CONTEXT</span></div>
+                <div class="chain-row"><span class="chain-index">02</span><span class="chain-title">制造时间压力</span><span class="chain-type">URGENCY</span></div>
+                <div class="chain-row"><span class="chain-index">03</span><span class="chain-title">淡化权限含义</span><span class="chain-type">FRAMING</span></div>
+                <div class="chain-row"><span class="chain-index">04</span><span class="chain-title">诱导点击“允许”</span><span class="chain-type">CONSENT</span></div>
+              </div>
+            </div>
+          </aside>
+        </header>
+
+        <section class="section" id="lab" aria-labelledby="lab-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">Live lab</p><h2 id="lab-title">在安全边界内复现攻击链</h2></div>
+            <p>下方浅色区域模拟钓鱼落地页。点击按钮会请求真实的浏览器摄像头权限；只有你在浏览器原生提示中允许后，页面才会在本地截取一帧。</p>
+          </div>
+
+          <div class="lab-layout">
+            <div class="lab-card">
+              <div class="lab-meta"><span class="live-badge">隔离演示环境</span><span>NETWORK EGRESS: BLOCKED</span></div>
+              <div class="bait-panel">
+                <div class="fake-brand"><span class="fake-brand-icon" aria-hidden="true">盾</span>账户安全中心</div>
+                <span class="alert-pill">异常登录提醒</span>
+                <h3>检测到新设备登录，请在 2 分钟内完成人脸核验</h3>
+                <p>若非本人操作，账户可能存在风险。攻击者常用这类“熟悉的品牌 + 明确的损失 + 很短的时限”压缩你的判断时间。</p>
+                <ul class="bait-facts">
+                  <li>设备：未知移动设备</li>
+                  <li>状态：等待身份确认</li>
+                  <li>话术：超时后将限制账户</li>
+                </ul>
+                <button class="bait-button" id="capture" type="button">开始人脸安全核验</button>
+                <p class="disclosure">反诈演示：按钮会触发真实浏览器权限请求，不会向服务器发送数据</p>
+              </div>
+
+              <div class="capture-stage" id="capture-stage" hidden>
+                <div class="capture-grid">
+                  <div><p class="media-label">浏览器实时画面</p><video id="preview" playsinline muted hidden></video></div>
+                  <div><p class="media-label">本地截取结果</p><canvas id="photo" role="img" aria-label="本地摄像头截取结果" hidden>你的浏览器不支持画布预览。</canvas></div>
+                </div>
+                <p class="status" id="status" role="status" aria-live="polite"></p>
+                <div class="capture-actions">
+                  <button class="btn btn-danger" id="clear" type="button" hidden>清除本地照片</button>
+                  <button class="btn btn-quiet" id="retry" type="button" hidden>重新演示</button>
+                </div>
+              </div>
+            </div>
+
+            <aside class="analysis-card" aria-label="实验监测信息">
+              <h3>实验监测</h3>
+              <dl class="log">
+                <div class="log-item"><span class="log-icon">A</span><div><dt>授权入口</dt><dd>只能由用户操作触发，网页不能替你点击浏览器的“允许”。</dd></div></div>
+                <div class="log-item"><span class="log-icon">B</span><div><dt>数据范围</dt><dd id="data-scope">尚未请求摄像头</dd></div></div>
+                <div class="log-item"><span class="log-icon">C</span><div><dt>设备状态</dt><dd id="device-state">未启用</dd></div></div>
+              </dl>
+              <div class="network-lock">连接策略已锁定：页面 CSP 禁止 fetch、XHR、WebSocket 等对外连接。本页源码也不包含任何上传逻辑。</div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="section" id="signals" aria-labelledby="signals-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">Signal scanner</p><h2 id="signals-title">三种最常见的诱导信号</h2></div>
+            <p>攻击通常不需要突破浏览器，只需要重新解释权限请求。点击卡片查看每一种话术在心理层面做了什么。</p>
+          </div>
+          <div class="signals">
+            <button class="signal" type="button" aria-pressed="false">
+              <span class="signal-number">SIGNAL / 01</span><h3>借用信任</h3><p>仿冒熟悉的品牌、颜色和业务流程，让页面看起来“本来就该这样”。</p><span class="signal-detail" aria-hidden="true">检查域名与证书，而不是依赖页面 Logo。网页视觉可以被完整复制。</span>
+            </button>
+            <button class="signal" type="button" aria-pressed="false">
+              <span class="signal-number">SIGNAL / 02</span><h3>制造紧迫</h3><p>用冻结、过期、限时和损失让你跳过核验网址与权限用途。</p><span class="signal-detail" aria-hidden="true">真正重要的安全操作值得暂停。关闭页面，从官方 App 或收藏入口重新进入。</span>
+            </button>
+            <button class="signal" type="button" aria-pressed="false">
+              <span class="signal-number">SIGNAL / 03</span><h3>权限洗白</h3><p>把“允许摄像头”描述成签到、验证或领取流程中的普通一步。</p><span class="signal-detail" aria-hidden="true">浏览器显示的是能力本身。无论网页怎样命名，摄像头权限就是持续读取画面的能力。</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="boundary-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">Trust boundary</p><h2 id="boundary-title">分清网页界面与浏览器权限</h2></div>
+            <p>钓鱼页面能控制页面里的每个像素，却不能控制浏览器地址栏和原生权限提示。真正的安全边界就在两者之间。</p>
+          </div>
+          <div class="compare">
+            <article class="compare-card">
+              <h3><span class="compare-dot" aria-hidden="true"></span>网页可以伪造</h3>
+              <ul><li><strong>品牌视觉：</strong>Logo、配色、客服头像</li><li><strong>业务理由：</strong>登录异常、领奖、实名核验</li><li><strong>站内弹窗：</strong>任何看似“系统提示”的卡片</li></ul>
+            </article>
+            <article class="compare-card safe">
+              <h3><span class="compare-dot" aria-hidden="true"></span>浏览器负责守门</h3>
+              <ul><li><strong>站点来源：</strong>地址栏中的真实域名</li><li><strong>能力名称：</strong>摄像头、麦克风、位置等权限</li><li><strong>最终决定：</strong>只有你能选择允许或拒绝</li></ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="defense" aria-labelledby="defense-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">Defense playbook</p><h2 id="defense-title">把识别动作变成肌肉记忆</h2></div>
+            <p>不要尝试判断页面“像不像真的”。建立固定的核验动作，比依赖直觉更可靠。</p>
+          </div>
+          <div class="checklist">
+            <div class="one-line-rule">
+              <p class="eyebrow">One-line rule</p>
+              <blockquote>先看域名，再看权限；一旦催促，立即退出。</blockquote>
+              <p>如果服务确实需要处理，关闭当前页面，从官方 App、手动输入的网址或可信收藏重新进入。</p>
+            </div>
+            <div>
+              <article class="rule"><h3>01 · 核验来源</h3><p>检查完整域名，警惕拼写替换、额外前后缀和陌生短链接。HTTPS 只代表连接加密，不代表网站可信。</p></article>
+              <article class="rule"><h3>02 · 质疑必要性</h3><p>问自己：这个业务是否真的需要摄像头？领奖、解冻、客服沟通通常没有读取摄像头的合理理由。</p></article>
+              <article class="rule"><h3>03 · 默认拒绝</h3><p>不确定时先点拒绝。正规业务可以解释用途并允许你稍后重新授权，拒绝不会造成不可逆后果。</p></article>
+              <article class="rule"><h3>04 · 用后撤销</h3><p>在浏览器网站设置中移除不再需要的摄像头和麦克风权限，关注地址栏的设备使用指示。</p></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="faq-title">
+          <div class="section-heading"><div><p class="eyebrow">Technical notes</p><h2 id="faq-title">技术分析补充</h2></div><p>用于讲解时，可以从浏览器安全模型、权限生命周期和网络边界三个方向展开。</p></div>
+          <details><summary>网页能绕过摄像头授权弹窗吗？</summary><p>现代浏览器要求站点处于安全上下文，并由用户在浏览器原生界面中授权。网页不能用 CSS 改写这个原生提示，也不能替用户点击允许；社会工程攻击的重点是诱导用户主动授权。</p></details>
+          <details><summary>授权后网站可以持续拍摄吗？</summary><p>只要页面仍持有活动的 MediaStreamTrack，就可能持续读取画面，浏览器通常会显示摄像头使用指示。本演示截取一帧后立即停止所有轨道，并清空 video 的 srcObject。</p></details>
+          <details><summary>本页为什么能够证明没有上传？</summary><p>页面不包含 fetch、XHR、WebSocket、表单提交或第三方资源；内容安全策略还把 connect-src 设置为 none。你可以在浏览器开发者工具的 Network 面板中独立核验。</p></details>
+        </section>
+      </main>
+
+      <footer><span>镜鉴实验室 · 仅用于授权的反诈培训与安全研究</span><span>照片随页面刷新或关闭而清除</span></footer>
+    </div>
 
     <script>
-      const start = document.querySelector('#start');
+      const captureButton = document.querySelector('#capture');
+      const clearButton = document.querySelector('#clear');
+      const retryButton = document.querySelector('#retry');
+      const captureStage = document.querySelector('#capture-stage');
       const preview = document.querySelector('#preview');
       const photo = document.querySelector('#photo');
       const status = document.querySelector('#status');
+      const dataScope = document.querySelector('#data-scope');
+      const deviceState = document.querySelector('#device-state');
+      const context = photo.getContext('2d');
+      let activeStream = null;
 
-      start.addEventListener('click', async () => {
-        let stream;
+      function stopCamera() {
+        if (activeStream) {
+          activeStream.getTracks().forEach(track => track.stop());
+          activeStream = null;
+        }
+        preview.srcObject = null;
+        preview.hidden = true;
+        deviceState.textContent = '已停止';
+      }
+
+      function clearPhoto(message = '本地照片已清除。') {
+        context.clearRect(0, 0, photo.width, photo.height);
+        photo.width = 0;
+        photo.height = 0;
+        photo.hidden = true;
+        clearButton.hidden = true;
+        dataScope.textContent = '当前标签页内无照片数据';
+        status.dataset.kind = 'success';
+        status.textContent = message;
+      }
+
+      async function runCapture() {
+        stopCamera();
+        clearPhoto('正在准备新的安全演示…');
+        captureStage.hidden = false;
+        retryButton.hidden = true;
+        captureButton.disabled = true;
+        captureButton.textContent = '等待浏览器授权…';
+        status.dataset.kind = '';
+        status.textContent = '请留意：接下来出现的是浏览器原生权限提示，网页无法控制它的样式。';
+        deviceState.textContent = '正在请求权限';
+
         try {
           if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-            throw new Error('安全上下文不可用：请通过 HTTPS 网站在 Safari 或 Chrome 中打开，不要直接打开聊天附件或本地 HTML 文件。');
+            throw new Error('摄像头 API 不可用。请使用 HTTPS 地址，并在 Safari、Chrome 或 Edge 中打开。');
           }
-          status.textContent = '正在请求浏览器摄像头授权…';
-          stream = await navigator.mediaDevices.getUserMedia({
+
+          activeStream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'user' },
             audio: false,
           });
-
-          preview.srcObject = stream;
+          deviceState.textContent = '摄像头已短暂启用';
+          preview.srcObject = activeStream;
           preview.hidden = false;
           await preview.play();
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 350));
+
+          if (!preview.videoWidth || !preview.videoHeight) {
+            throw new Error('摄像头画面尚未准备完成，请重新演示。');
+          }
 
           photo.width = preview.videoWidth;
           photo.height = preview.videoHeight;
-          photo.getContext('2d').drawImage(preview, 0, 0, photo.width, photo.height);
+          context.drawImage(preview, 0, 0, photo.width, photo.height);
           photo.hidden = false;
-          status.textContent = '已拍摄。照片只保留在此页面。';
+          clearButton.hidden = false;
+          retryButton.hidden = false;
+
+          const estimatedBytes = Math.round(photo.toDataURL('image/jpeg', 0.78).length * 0.75);
+          dataScope.textContent = `本地画布一帧，约 ${(estimatedBytes / 1024).toFixed(1)} KB；未发送`;
+          status.dataset.kind = 'success';
+          status.textContent = '演示完成：页面在获得权限后截取了一帧。摄像头现已停止，照片仍可手动清除。';
         } catch (error) {
           const reason = {
-            NotAllowedError: '摄像头权限被拒绝，或当前浏览器/内置浏览器不允许访问摄像头。',
-            NotFoundError: '未检测到可用摄像头。',
-            NotReadableError: '摄像头正被其他应用占用，或系统无法读取该设备。',
+            NotAllowedError: '你拒绝了摄像头权限。面对来源不明的页面，这是正确的默认选择。',
+            NotFoundError: '没有检测到可用的摄像头。',
+            NotReadableError: '摄像头可能正被其他应用占用。',
+            AbortError: '摄像头启动被中断，请稍后重试。',
           }[error.name];
-          status.textContent = `无法拍照：${reason || error.message || error.name || '未知错误'}`;
+          status.dataset.kind = 'error';
+          status.textContent = reason || error.message || '摄像头演示未能完成。';
+          dataScope.textContent = '未生成新的照片数据';
+          retryButton.hidden = false;
         } finally {
-          if (stream) stream.getTracks().forEach(track => track.stop());
-          preview.srcObject = null;
-          preview.hidden = true;
+          stopCamera();
+          captureButton.disabled = false;
+          captureButton.textContent = '开始人脸安全核验';
         }
+      }
+
+      captureButton.addEventListener('click', runCapture);
+      retryButton.addEventListener('click', runCapture);
+      clearButton.addEventListener('click', () => clearPhoto());
+      window.addEventListener('pagehide', () => {
+        stopCamera();
+        context.clearRect(0, 0, photo.width, photo.height);
+      });
+      document.querySelectorAll('.signal').forEach(button => {
+        button.addEventListener('click', () => {
+          const expanded = button.getAttribute('aria-pressed') !== 'true';
+          button.setAttribute('aria-pressed', String(expanded));
+          button.querySelector('.signal-detail').setAttribute('aria-hidden', String(!expanded));
+        });
       });
     </script>
   </body>
