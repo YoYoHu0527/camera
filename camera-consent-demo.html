@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>摄像头授权与拍照测试</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #172033; }
+      video, canvas { width: 100%; max-width: 560px; border-radius: 12px; background: #111827; display: block; margin: 16px 0; }
+      button { border: 0; border-radius: 8px; padding: 12px 16px; font-size: 16px; cursor: pointer; background: #155eef; color: white; }
+      #status { min-height: 1.5em; color: #475467; }
+      .notice { padding: 14px; border-radius: 8px; background: #eff8ff; }
+    </style>
+  </head>
+  <body>
+    <h1>摄像头授权与拍照测试</h1>
+    <p class="notice">点击按钮后，页面会请求使用前置摄像头。只有在您允许浏览器授权后，才会拍摄一张照片；照片仅显示在当前页面，不会上传。</p>
+    <button id="start" type="button">同意并开启前置摄像头</button>
+    <p id="status" role="status"></p>
+    <video id="preview" playsinline muted hidden></video>
+    <canvas id="photo" hidden></canvas>
+
+    <script>
+      const start = document.querySelector('#start');
+      const preview = document.querySelector('#preview');
+      const photo = document.querySelector('#photo');
+      const status = document.querySelector('#status');
+
+      start.addEventListener('click', async () => {
+        let stream;
+        try {
+          if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            throw new Error('安全上下文不可用：请通过 HTTPS 网站在 Safari 或 Chrome 中打开，不要直接打开聊天附件或本地 HTML 文件。');
+          }
+          status.textContent = '正在请求浏览器摄像头授权…';
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user' },
+            audio: false,
+          });
+
+          preview.srcObject = stream;
+          preview.hidden = false;
+          await preview.play();
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          photo.width = preview.videoWidth;
+          photo.height = preview.videoHeight;
+          photo.getContext('2d').drawImage(preview, 0, 0, photo.width, photo.height);
+          photo.hidden = false;
+          status.textContent = '已拍摄。照片只保留在此页面。';
+        } catch (error) {
+          const reason = {
+            NotAllowedError: '摄像头权限被拒绝，或当前浏览器/内置浏览器不允许访问摄像头。',
+            NotFoundError: '未检测到可用摄像头。',
+            NotReadableError: '摄像头正被其他应用占用，或系统无法读取该设备。',
+          }[error.name];
+          status.textContent = `无法拍照：${reason || error.message || error.name || '未知错误'}`;
+        } finally {
+          if (stream) stream.getTracks().forEach(track => track.stop());
+          preview.srcObject = null;
+          preview.hidden = true;
+        }
+      });
+    </script>
+  </body>
+</html>
