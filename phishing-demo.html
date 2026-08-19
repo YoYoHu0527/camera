@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>安全演示 - 摄像头钓鱼攻击模拟</title>
+    <style>
+      :root {
+        color: #172033;
+        background: #f8fafc;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        width: min(100%, 720px);
+        min-height: 100svh;
+        margin: 0 auto;
+        padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-left));
+      }
+      /* 顶部警示条 */
+      .demo-banner {
+        position: sticky;
+        top: 0;
+        z-index: 9999;
+        background: linear-gradient(90deg, #dc2626, #ea580c);
+        color: #fff;
+        text-align: center;
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        margin: -24px -16px 20px;
+      }
+      .demo-banner span { opacity: 0.9; font-weight: 400; font-size: 12px; }
+
+      h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 6vw, 2rem); }
+      .subtitle { color: #64748b; margin: 0 0 24px; font-size: 14px; }
+
+      /* 钓鱼场景卡片 */
+      .scenario-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      }
+      .scenario-card h2 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-weight: 600;
+      }
+      .tag-danger { background: #fee2e2; color: #dc2626; }
+      .tag-safe { background: #dcfce7; color: #16a34a; }
+
+      .scenario-desc { color: #475467; font-size: 14px; line-height: 1.6; margin: 0 0 16px; }
+
+      /* 伪装的系统弹窗 */
+      .fake-system-dialog {
+        background: #fff;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        padding: 20px;
+        margin: 16px 0;
+        text-align: center;
+      }
+      .fake-system-dialog .icon {
+        width: 48px; height: 48px;
+        background: #eff6ff;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        margin: 0 auto 12px;
+        font-size: 24px;
+      }
+      .fake-system-dialog h3 { margin: 0 0 6px; font-size: 16px; }
+      .fake-system-dialog p { margin: 0 0 16px; font-size: 13px; color: #64748b; }
+
+      button {
+        min-height: 44px;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 20px;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+      }
+      button:hover { opacity: 0.88; }
+      .btn-primary { background: #155eef; color: #fff; width: 100%; }
+      .btn-secondary { background: #f1f5f9; color: #334155; }
+      .btn-danger { background: #dc2626; color: #fff; }
+      .btn-row { display: flex; gap: 10px; }
+      .btn-row button { flex: 1; }
+
+      video, canvas {
+        width: 100%;
+        max-width: 560px;
+        border-radius: 12px;
+        background: #111827;
+        display: block;
+        margin: 12px auto 0;
+      }
+      video[hidden], canvas[hidden] { display: none; }
+
+      #status {
+        min-height: 1.5em;
+        margin: 12px 0 0;
+        color: #475467;
+        font-size: 14px;
+        overflow-wrap: anywhere;
+      }
+
+      /* 攻击数据展示 */
+      .stolen-data {
+        background: #0f172a;
+        color: #e2e8f0;
+        border-radius: 10px;
+        padding: 16px;
+        margin-top: 16px;
+        font-family: "Cascadia Code", "Consolas", monospace;
+        font-size: 12px;
+        line-height: 1.7;
+        overflow-x: auto;
+      }
+      .stolen-data .label { color: #f59e0b; }
+      .stolen-data .value { color: #67e8f9; }
+      .stolen-data .warn { color: #fca5a5; }
+
+      /* 揭秘区域 */
+      .reveal-section {
+        background: #fefce8;
+        border: 1px solid #fde68a;
+        border-radius: 14px;
+        padding: 20px;
+        margin-top: 24px;
+      }
+      .reveal-section h2 { margin: 0 0 12px; font-size: 18px; color: #92400e; }
+      .reveal-section ol { margin: 0; padding-left: 20px; color: #78350f; font-size: 14px; line-height: 1.8; }
+      .reveal-section li { margin-bottom: 4px; }
+
+      .technique {
+        background: #fff;
+        border-left: 3px solid #dc2626;
+        padding: 10px 14px;
+        margin: 10px 0;
+        border-radius: 0 8px 8px 0;
+        font-size: 13px;
+      }
+      .technique strong { color: #dc2626; }
+
+      @media (min-width: 600px) {
+        body { padding-top: 40px; padding-bottom: 40px; }
+        .btn-primary { width: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="demo-banner">
+      ⚠️ 安全培训演示页面 · 仅供反诈技术讲解使用 · 请勿用于非法用途
+      <br><span>本页面不会上传任何数据，所有"窃取"仅为本地模拟</span>
+    </div>
+
+    <h1>摄像头钓鱼攻击模拟演示</h1>
+    <p class="subtitle">通过三个场景展示恶意网站如何诱导用户授予摄像头权限</p>
+
+    <!-- 场景一：伪装系统弹窗 -->
+    <div class="scenario-card">
+      <h2>场景一：伪装系统安全验证 <span class="tag tag-danger">高危</span></h2>
+      <p class="scenario-desc">
+        攻击者伪造一个看起来像系统弹窗的对话框，声称"检测到异常登录，需要人脸验证"，
+        诱导用户点击按钮，实际触发的是浏览器摄像头权限请求。
+      </p>
+
+      <div class="fake-system-dialog">
+        <div class="icon">🔒</div>
+        <h3>安全验证</h3>
+        <p>检测到您的账号在异地登录，请进行人脸验证以确认是本人操作</p>
+        <button id="btn-scene1" class="btn-primary" type="button">开始人脸验证</button>
+      </div>
+
+      <p id="status1" role="status"></p>
+      <video id="preview1" playsinline muted hidden></video>
+      <canvas id="photo1" hidden></canvas>
+
+      <div id="stolen1" class="stolen-data" hidden>
+        <div><span class="label">[攻击者获取]</span></div>
+        <div><span class="label">照片数据：</span><span class="value" id="photoSize1"></span></div>
+        <div><span class="label">设备信息：</span><span class="value" id="device1"></span></div>
+        <div><span class="label">IP/位置：</span><span class="value">（模拟：已获取粗略位置）</span></div>
+        <div class="warn">→ 现实中这些数据会被静默上传到攻击者服务器</div>
+      </div>
+    </div>
+
+    <!-- 场景二：紧迫感诱导 -->
+    <div class="scenario-card">
+      <h2>场景二：限时福利 + 紧迫感 <span class="tag tag-danger">高危</span></h2>
+      <p class="scenario-desc">
+        利用"限时""仅剩X名""不验证就冻结"等话术制造紧迫感，
+        让用户来不及思考就点击授权。
+      </p>
+
+      <div class="fake-system-dialog" style="border-color: #f59e0b;">
+        <div class="icon" style="background: #fffbeb;">🎁</div>
+        <h3>恭喜您获得新人福利！</h3>
+        <p style="color: #dc2626; font-weight: 600;">⏰ 剩余 00:59，需人脸核验身份后领取</p>
+        <button id="btn-scene2" class="btn-danger" type="button">立即核验领取 ¥88</button>
+      </div>
+
+      <p id="status2" role="status"></p>
+      <video id="preview2" playsinline muted hidden></video>
+      <canvas id="photo2" hidden></canvas>
+
+      <div id="stolen2" class="stolen-data" hidden>
+        <div><span class="label">[攻击者获取]</span></div>
+        <div><span class="label">照片数据：</span><span class="value" id="photoSize2"></span></div>
+        <div><span class="label">攻击手法：</span><span class="value">紧迫感 + 利益诱惑</span></div>
+        <div class="warn">→ 用户因"怕错过"而快速授权，忽略了权限提示</div>
+      </div>
+    </div>
+
+    <!-- 场景三：正常对比 -->
+    <div class="scenario-card">
+      <h2>场景三：正常网站（对比组） <span class="tag tag-safe">安全</span></h2>
+      <p class="scenario-desc">
+        正规网站会明确告知用途，且不会伪装成系统弹窗。用户可以清楚知道自己在授权什么。
+      </p>
+      <button id="btn-scene3" class="btn-secondary" type="button">开启摄像头拍照（明确告知）</button>
+      <p id="status3" role="status"></p>
+      <video id="preview3" playsinline muted hidden></video>
+      <canvas id="photo3" hidden></canvas>
+    </div>
+
+    <!-- 技术揭秘 -->
+    <div class="reveal-section">
+      <h2>🔍 攻击手法揭秘 & 防范要点</h2>
+      <ol>
+        <li><strong>权限弹窗无法绕过</strong>：现代浏览器的摄像头权限请求是浏览器原生 UI，网页无法伪造或隐藏。攻击者能做的只是<strong>诱导你点击"允许"</strong>。</li>
+        <li><strong>识别伪装弹窗</strong>：真正的浏览器权限弹窗出现在地址栏附近，有浏览器品牌标识，且无法被网页 CSS 控制样式。页面内部画出来的"系统弹窗"都是假的。</li>
+        <li><strong>警惕紧迫感话术</strong>："限时""冻结""异常登录"等都是为了让你不经思考就点允许。遇到时先停下来，确认网址是否可信。</li>
+        <li><strong>检查地址栏</strong>：钓鱼网站常用相似域名（如 taoboo.com、weixin-login.com）。授权前先看清楚网址。</li>
+        <li><strong>权限最小化</strong>：不认识的网站一律拒绝摄像头/麦克风权限。需要时再临时授权，用完即撤销。</li>
+        <li><strong>定期清理权限</strong>：在浏览器设置中查看已授权摄像头的网站列表，移除不再信任的站点。</li>
+      </ol>
+
+      <div class="technique">
+        <strong>核心原理：</strong>钓鱼攻击的本质不是"破解技术"，而是"破解人"。
+        浏览器的安全模型很坚固，但用户的一次误点"允许"就会让所有防护失效。
+        反诈的关键是<strong>慢下来、看清楚、想明白</strong>。
+      </div>
+    </div>
+
+    <script>
+      // 通用拍照函数
+      async function capturePhoto(btnId, previewId, photoId, statusId, stolenId, sizeId, deviceId) {
+        const btn = document.getElementById(btnId);
+        const preview = document.getElementById(previewId);
+        const photo = document.getElementById(photoId);
+        const status = document.getElementById(statusId);
+        const stolen = document.getElementById(stolenId);
+        const sizeEl = document.getElementById(sizeId);
+        const deviceEl = document.getElementById(deviceId);
+
+        let stream;
+        try {
+          if (!navigator.mediaDevices?.getUserMedia) {
+            throw new Error('当前浏览器不支持摄像头 API');
+          }
+          btn.disabled = true;
+          btn.textContent = '验证中…';
+          status.textContent = '正在请求摄像头权限…';
+
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user' },
+            audio: false,
+          });
+
+          preview.srcObject = stream;
+          preview.hidden = false;
+          await preview.play();
+          await new Promise(r => setTimeout(r, 800));
+
+          photo.width = preview.videoWidth;
+          photo.height = preview.videoHeight;
+          photo.getContext('2d').drawImage(preview, 0, 0, photo.width, photo.height);
+          photo.hidden = false;
+
+          // 模拟"窃取"数据展示（仅本地，不上传）
+          const dataUrl = photo.toDataURL('image/jpeg', 0.8);
+          if (sizeEl) sizeEl.textContent = (dataUrl.length / 1024).toFixed(1) + ' KB (base64)';
+          if (deviceEl) deviceEl.textContent = navigator.userAgent.split(') ')[0].split('(')[1] || '未知设备';
+          if (stolen) stolen.hidden = false;
+
+          status.textContent = '✅ 演示完成：照片已在本地捕获（模拟被窃取，未上传）';
+        } catch (err) {
+          const reason = {
+            NotAllowedError: '用户拒绝了摄像头权限（这是正确的安全行为！）',
+            NotFoundError: '未检测到摄像头',
+            NotReadableError: '摄像头被占用',
+          }[err.name];
+          status.textContent = '❌ ' + (reason || err.message || err.name);
+        } finally {
+          if (stream) stream.getTracks().forEach(t => t.stop());
+          preview.srcObject = null;
+          btn.disabled = false;
+          btn.textContent = btn.id === 'btn-scene1' ? '开始人脸验证' :
+                           btn.id === 'btn-scene2' ? '立即核验领取 ¥88' :
+                           '开启摄像头拍照（明确告知）';
+        }
+      }
+
+      document.getElementById('btn-scene1').addEventListener('click', () =>
+        capturePhoto('btn-scene1', 'preview1', 'photo1', 'status1', 'stolen1', 'photoSize1', 'device1'));
+      document.getElementById('btn-scene2').addEventListener('click', () =>
+        capturePhoto('btn-scene2', 'preview2', 'photo2', 'status2', 'stolen2', 'photoSize2', null));
+      document.getElementById('btn-scene3').addEventListener('click', () =>
+        capturePhoto('btn-scene3', 'preview3', 'photo3', 'status3', null, null, null));
+    </script>
+  </body>
+</html>
