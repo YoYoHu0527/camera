@@ -5,10 +5,12 @@
 ## 安全边界
 
 - 不收集账号、密码或身份信息
-- 摄像头画面只在当前标签页内处理，截取一帧后立即停止设备
-- 页面关闭或刷新后照片自动清除，也可在页面内手动清除
-- 只有用户完成演示并再次勾选同意后，才发送匿名飞书通知
-- 通知仅包含事件类型、同意版本和时间，不包含照片或设备信息
+- 只有用户明确勾选同意并点击按钮后，才请求摄像头权限和上传数据
+- 同意范围在按钮旁逐项披露：一张前置摄像头照片、基础设备摘要和连接 IP
+- 截取一帧后立即停止摄像头；页面仅保留预览，刷新或手动清除即可移除本地预览
+- Worker 只做校验和转发，不使用数据库、KV 或对象存储保存数据
+- 连接 IP 由 Cloudflare 的受信请求头读取，不接受网页自行提交的 IP
+- 照片和摘要会进入指定飞书群，后续保留与删除受飞书群消息策略控制
 - 仅用于已授权的安全研究、反诈培训与技术分析
 
 ## 部署
@@ -17,17 +19,26 @@
 
 ## 配置飞书通知
 
-公开的 GitHub Pages 不能安全保存飞书 Webhook。本项目通过 `worker/feishu-notify.js` 代理发送通知，Webhook 只保存在 Worker secret 中。飞书官方也要求妥善保管自定义机器人 Webhook，避免被恶意调用。
+图片上传不能只使用原来的群自定义机器人 Webhook。本项目改用飞书企业自建应用机器人：Worker 先取得应用访问凭证、上传图片，再向指定群发送包含照片、设备摘要和 IP 的富文本消息。应用密钥只保存在 Cloudflare Worker secret 中。
 
-1. 在接收通知的飞书群中添加自定义机器人，并保存 Webhook。可给机器人配置关键词 `[反诈实验]`。
-2. `worker/wrangler.toml` 已按本仓库配置为 `https://yoyohu0527.github.io`。如果以后改用自定义域名，再同步修改 `ALLOWED_ORIGIN`，末尾不要加斜杠。
-3. 在 `worker` 目录执行 `npx wrangler secret put FEISHU_WEBHOOK_URL`，输入完整 Webhook；不要把它写入仓库。
-4. 执行 `npx wrangler deploy`，获得类似 `https://camera-feishu-notify.NAME.workers.dev` 的地址。
-5. 将 `index.html` 中 `feishu-notify-endpoint` 的 `content` 设置为完整接口地址，例如 `https://camera-feishu-notify.NAME.workers.dev/notify`。
+1. 在飞书开放平台创建企业自建应用，启用机器人能力。
+2. 为应用开通上传图片和以机器人身份发送消息所需权限（`im:resource`、`im:message:send_as_bot`），发布应用，并把应用机器人加入接收消息的群。
+3. 获取应用的 App ID、App Secret 和目标群 Chat ID。不要把 App Secret 粘贴到聊天、源码或 Git 仓库。
+4. `worker/wrangler.toml` 已按本仓库配置为 `https://yoyohu0527.github.io`。如果以后改用自定义域名，再同步修改 `ALLOWED_ORIGIN`，末尾不要加斜杠。
+5. 在 `worker` 目录依次执行以下命令，并在提示中输入对应值：
+
+   ```powershell
+   npx wrangler secret put FEISHU_APP_ID
+   npx wrangler secret put FEISHU_APP_SECRET
+   npx wrangler secret put FEISHU_CHAT_ID
+   ```
+
+6. 执行 `npx wrangler deploy`。当前前端已指向 `https://camera-feishu-notify.yoyo001.workers.dev/notify`；若 Worker 地址变化，再修改 `index.html` 中 `feishu-notify-endpoint` 的 `content`。
+7. 新流程验证成功后，旧的 Webhook secret 已不再使用，可以执行 `npx wrangler secret delete FEISHU_WEBHOOK_URL` 删除。
 
 如果 Worker 使用自定义域名，还需要把该域名加入 `index.html` 的 CSP `connect-src`。生产使用时建议在 Worker 平台额外开启速率限制。
 
-飞书参考：[使用自定义机器人发送消息卡片](https://open.feishu.cn/document/common-capabilities/message-card/getting-started/send-message-cards-with-a-custom-bot?lang=zh-CN)。
+飞书参考：[获取 tenant_access_token](https://open.feishu.cn/document/server-docs/authentication-management/access-token/tenant_access_token_internal)、[上传图片](https://open.feishu.cn/document/server-docs/im-v1/image/create)、[发送消息](https://open.feishu.cn/document/server-docs/im-v1/message/create)。Cloudflare IP 来源参考：[HTTP 请求头](https://developers.cloudflare.com/fundamentals/reference/http-headers/)。
 
 ## 本地查看
 

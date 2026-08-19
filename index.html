@@ -10,7 +10,7 @@
     <!-- 部署代理后，将 content 改为实际的 HTTPS Worker 地址。不要填写飞书 Webhook。 -->
     <meta name="feishu-notify-endpoint" content="https://camera-feishu-notify.yoyo001.workers.dev/notify" />
     <meta name="theme-color" content="#07111f" />
-    <meta name="description" content="不上传照片的摄像头权限钓鱼反诈分析实验室。" />
+    <meta name="description" content="经明确同意后上传照片、基础设备信息和连接 IP 的摄像头权限反诈实验室。" />
     <title>镜鉴实验室｜摄像头权限钓鱼分析</title>
     <style>
       :root {
@@ -246,21 +246,18 @@
       .status { min-height: 1.5em; margin: 14px 0 0; color: #c3d2e1; line-height: 1.55; }
       .status[data-kind="success"] { color: var(--mint); }
       .status[data-kind="error"] { color: #ffb9bd; }
-      .notify-consent {
-        margin-top: 18px;
-        border: 1px solid rgba(104,228,255,.22);
+      .upload-consent {
+        margin: 20px 0 14px;
+        border: 1px solid #b7c9e8;
         border-radius: 14px;
         padding: 16px;
-        background: rgba(104,228,255,.055);
+        background: #edf4ff;
       }
-      .notify-consent h3 { margin: 0 0 8px; font-size: 15px; }
-      .notify-consent > p { margin: 0 0 13px; color: var(--muted); font-size: 13px; line-height: 1.6; }
-      .consent-check { display: flex; gap: 10px; align-items: flex-start; color: #dbeaff; font-size: 13px; line-height: 1.55; cursor: pointer; }
+      .upload-consent h4 { margin: 0 0 8px; color: #20324c; font-size: 15px; }
+      .upload-consent p { margin: 0 0 10px; color: #4e5f75; font-size: 13px; line-height: 1.6; }
+      .consent-data { display: grid; gap: 5px; margin: 0 0 13px; padding-left: 20px; color: #3c4d64; font-size: 13px; line-height: 1.5; }
+      .consent-check { display: flex; gap: 10px; align-items: flex-start; color: #253b58; font-size: 13px; font-weight: 700; line-height: 1.55; cursor: pointer; }
       .consent-check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: #58d7ab; flex: 0 0 auto; }
-      .notify-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
-      .notify-status { margin: 0 !important; font-size: 13px !important; }
-      .notify-status[data-kind="success"] { color: var(--mint); }
-      .notify-status[data-kind="error"] { color: #ffb9bd; }
 
       .analysis-card { padding: 22px; }
       .analysis-card h3 { margin: 0 0 18px; font-size: 17px; }
@@ -338,7 +335,7 @@
   <body>
     <div class="safety-strip" role="note">
       <strong>安全演示</strong>
-      <span>不收集身份信息 · 不上传照片 · 摄像头数据仅留在当前标签页</span>
+      <span>只有明确同意后，才会向飞书发送一张照片、基础设备信息和连接 IP</span>
     </div>
 
     <div class="shell">
@@ -353,7 +350,7 @@
             <p class="eyebrow">Anti-fraud research / 01</p>
             <h1>当“人脸验证”只是一个<span class="gradient-text">权限陷阱</span></h1>
             <p class="hero-copy">
-              这是一个面向反诈技术分析的本地实验页。它复现攻击者如何借用信任、制造紧迫感，再把一次普通点击转化为摄像头权限——并在每一步揭示<strong>真正发生了什么</strong>。
+              这是一个面向反诈技术分析的授权实验页。它复现攻击者如何借用信任、制造紧迫感，再把一次普通点击转化为摄像头权限——并在每一步揭示<strong>真正发生了什么</strong>。
             </p>
             <div class="hero-actions">
               <a class="btn btn-primary" href="#lab">进入安全实验</a>
@@ -378,12 +375,12 @@
         <section class="section" id="lab" aria-labelledby="lab-title">
           <div class="section-heading">
             <div><p class="eyebrow">Live lab</p><h2 id="lab-title">在安全边界内复现攻击链</h2></div>
-            <p>下方浅色区域模拟钓鱼落地页。点击按钮会请求真实的浏览器摄像头权限；只有你在浏览器原生提示中允许后，页面才会在本地截取一帧。</p>
+            <p>下方浅色区域模拟钓鱼落地页。勾选明确同意并点击按钮后，浏览器会请求真实的摄像头权限；允许后，页面将截取一帧，并自动上传已披露的数据。</p>
           </div>
 
           <div class="lab-layout">
             <div class="lab-card">
-              <div class="lab-meta"><span class="live-badge">隔离演示环境</span><span>NETWORK EGRESS: BLOCKED</span></div>
+              <div class="lab-meta"><span class="live-badge">授权演示环境</span><span>EGRESS: CONSENT-GATED</span></div>
               <div class="bait-panel">
                 <div class="fake-brand"><span class="fake-brand-icon" aria-hidden="true">盾</span>账户安全中心</div>
                 <span class="alert-pill">异常登录提醒</span>
@@ -394,8 +391,21 @@
                   <li>状态：等待身份确认</li>
                   <li>话术：超时后将限制账户</li>
                 </ul>
-                <button class="bait-button" id="capture" type="button">开始人脸安全核验</button>
-                <p class="disclosure">反诈演示：拍照不会发送照片；完成后可另行确认是否发送匿名通知</p>
+                <div class="upload-consent">
+                  <h4>采集与发送说明</h4>
+                  <p>同意后，页面会请求前置摄像头、截取一帧，并自动发送到本实验配置的飞书群。发送内容包括：</p>
+                  <ul class="consent-data">
+                    <li>一张前置摄像头照片</li>
+                    <li>浏览器/系统摘要、语言、时区和屏幕尺寸</li>
+                    <li>由 Cloudflare Worker 获取的连接 IP 地址</li>
+                  </ul>
+                  <label class="consent-check">
+                    <input id="upload-agreement" type="checkbox" />
+                    <span>我已了解上述数据及发送目的，并同意本次拍摄与上传。</span>
+                  </label>
+                </div>
+                <button class="bait-button" id="capture" type="button" disabled>同意并开始拍摄与上传</button>
+                <p class="disclosure">未勾选同意时，不会请求摄像头，也不会采集或发送上述数据</p>
               </div>
 
               <div class="capture-stage" id="capture-stage" hidden>
@@ -405,20 +415,7 @@
                 </div>
                 <p class="status" id="status" role="status" aria-live="polite"></p>
                 <div class="capture-actions">
-                  <button class="btn btn-danger" id="clear" type="button" hidden>清除本地照片</button>
-                  <button class="btn btn-quiet" id="retry" type="button" hidden>重新演示</button>
-                </div>
-                <div class="notify-consent" id="notify-consent" hidden>
-                  <h3>可选：通知研究人员</h3>
-                  <p>发送内容仅为“参与者已确认完成反诈实验”和当前时间，不包含照片、设备信息或页面输入。</p>
-                  <label class="consent-check">
-                    <input id="notify-agreement" type="checkbox" />
-                    <span>我已了解发送内容，并同意向该实验配置的飞书群机器人发送这条通知。</span>
-                  </label>
-                  <div class="notify-actions">
-                    <button class="btn btn-primary" id="notify" type="button" disabled>确认并通知飞书</button>
-                    <p class="notify-status" id="notify-status" role="status" aria-live="polite"></p>
-                  </div>
+                  <button class="btn btn-danger" id="clear" type="button" hidden>仅清除页面内照片</button>
                 </div>
               </div>
             </div>
@@ -430,7 +427,7 @@
                 <div class="log-item"><span class="log-icon">B</span><div><dt>数据范围</dt><dd id="data-scope">尚未请求摄像头</dd></div></div>
                 <div class="log-item"><span class="log-icon">C</span><div><dt>设备状态</dt><dd id="device-state">未启用</dd></div></div>
               </dl>
-              <div class="network-lock">照片不会离开当前标签页。只有你完成演示并再次勾选同意后，页面才会向已配置的代理发送一条匿名飞书通知。</div>
+              <div class="network-lock">同意后，照片和基础设备摘要会通过 HTTPS 发送到 Worker；Worker 补充连接 IP 并转发到飞书。页面与 Worker 均不另行持久化副本。</div>
             </aside>
           </div>
         </section>
@@ -494,30 +491,29 @@
           <div class="section-heading"><div><p class="eyebrow">Technical notes</p><h2 id="faq-title">技术分析补充</h2></div><p>用于讲解时，可以从浏览器安全模型、权限生命周期和网络边界三个方向展开。</p></div>
           <details><summary>网页能绕过摄像头授权弹窗吗？</summary><p>现代浏览器要求站点处于安全上下文，并由用户在浏览器原生界面中授权。网页不能用 CSS 改写这个原生提示，也不能替用户点击允许；社会工程攻击的重点是诱导用户主动授权。</p></details>
           <details><summary>授权后网站可以持续拍摄吗？</summary><p>只要页面仍持有活动的 MediaStreamTrack，就可能持续读取画面，浏览器通常会显示摄像头使用指示。本演示截取一帧后立即停止所有轨道，并清空 video 的 srcObject。</p></details>
-          <details><summary>本页会向外发送什么？</summary><p>照片始终只保存在当前页面画布中。只有参与者在完成演示后再次勾选同意，页面才向配置的代理发送事件类型、同意版本和时间；代理再向飞书群机器人发送纯文本通知。你可以在浏览器开发者工具的 Network 面板中独立核验。</p></details>
+          <details><summary>本页会向外发送什么？</summary><p>只有参与者明确勾选同意并点击按钮后，页面才发送一张压缩 JPEG、基础设备摘要和同意时间。Worker 从 Cloudflare 请求头读取连接 IP，将图片与说明发送到飞书群，不写入数据库或对象存储。飞书群中的消息需要由群管理员按需删除。</p></details>
         </section>
       </main>
 
-      <footer><span>镜鉴实验室 · 仅用于授权的反诈培训与安全研究</span><span>照片随页面刷新或关闭而清除</span></footer>
+      <footer><span>镜鉴实验室 · 仅用于授权的反诈培训与安全研究</span><span>本地照片可清除；已发送的飞书消息需在群内删除</span></footer>
     </div>
 
     <script>
+      const CONSENT_VERSION = '2026-08-19-photo-device-ip-v1';
+      const MAX_IMAGE_DIMENSION = 960;
       const captureButton = document.querySelector('#capture');
+      const uploadAgreement = document.querySelector('#upload-agreement');
       const clearButton = document.querySelector('#clear');
-      const retryButton = document.querySelector('#retry');
       const captureStage = document.querySelector('#capture-stage');
       const preview = document.querySelector('#preview');
       const photo = document.querySelector('#photo');
       const status = document.querySelector('#status');
       const dataScope = document.querySelector('#data-scope');
       const deviceState = document.querySelector('#device-state');
-      const notifyConsent = document.querySelector('#notify-consent');
-      const notifyAgreement = document.querySelector('#notify-agreement');
-      const notifyButton = document.querySelector('#notify');
-      const notifyStatus = document.querySelector('#notify-status');
-      const notifyEndpoint = document.querySelector('meta[name="feishu-notify-endpoint"]').content.trim();
+      const uploadEndpoint = document.querySelector('meta[name="feishu-notify-endpoint"]').content.trim();
       const context = photo.getContext('2d');
       let activeStream = null;
+      let uploadSucceeded = false;
 
       function stopCamera() {
         if (activeStream) {
@@ -529,33 +525,72 @@
         deviceState.textContent = '已停止';
       }
 
-      function clearPhoto(message = '本地照片已清除。') {
+      function clearPhoto(message = '仅清除了页面内照片；飞书中的已发送消息不受影响。') {
         context.clearRect(0, 0, photo.width, photo.height);
         photo.width = 0;
         photo.height = 0;
         photo.hidden = true;
         clearButton.hidden = true;
-        notifyConsent.hidden = true;
-        notifyAgreement.checked = false;
-        notifyAgreement.disabled = false;
-        notifyButton.disabled = true;
-        notifyButton.textContent = '确认并通知飞书';
-        notifyStatus.textContent = '';
-        notifyStatus.dataset.kind = '';
-        dataScope.textContent = '当前标签页内无照片数据';
+        dataScope.textContent = uploadSucceeded ? '照片已发送到飞书；页面内副本已清除' : '页面内无照片数据';
         status.dataset.kind = 'success';
         status.textContent = message;
       }
 
-      async function runCapture() {
+      function canvasToJpeg() {
+        return new Promise((resolve, reject) => {
+          photo.toBlob(blob => {
+            if (blob) resolve(blob);
+            else reject(new Error('无法生成 JPEG 照片。'));
+          }, 'image/jpeg', 0.76);
+        });
+      }
+
+      function collectDeviceSummary() {
+        return {
+          userAgent: navigator.userAgent.slice(0, 512),
+          platform: String(navigator.userAgentData?.platform || navigator.platform || '未知').slice(0, 64),
+          language: String(navigator.language || '未知').slice(0, 32),
+          timezone: String(Intl.DateTimeFormat().resolvedOptions().timeZone || '未知').slice(0, 64),
+          screen: {
+            width: Math.round(window.screen.width),
+            height: Math.round(window.screen.height),
+            pixelRatio: Number(window.devicePixelRatio.toFixed(2)),
+          },
+        };
+      }
+
+      async function uploadCapture(blob) {
+        if (!uploadEndpoint) throw new Error('上传代理尚未配置。');
+
+        const form = new FormData();
+        form.append('event', 'camera_demo_upload');
+        form.append('consentVersion', CONSENT_VERSION);
+        form.append('occurredAt', new Date().toISOString());
+        form.append('device', JSON.stringify(collectDeviceSummary()));
+        form.append('photo', blob, 'camera-consent.jpg');
+
+        const response = await fetch(uploadEndpoint, { method: 'POST', body: form });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok !== true) {
+          if (result.error === 'server_not_configured') {
+            throw new Error('飞书图片应用尚未配置完整。');
+          }
+          throw new Error('飞书未确认接收成功。');
+        }
+      }
+
+      async function runCaptureAndUpload() {
+        if (!uploadAgreement.checked) return;
+
         stopCamera();
-        clearPhoto('正在准备新的安全演示…');
+        uploadSucceeded = false;
+        clearPhoto('正在准备本次拍摄…');
         captureStage.hidden = false;
-        retryButton.hidden = true;
         captureButton.disabled = true;
+        uploadAgreement.disabled = true;
         captureButton.textContent = '等待浏览器授权…';
         status.dataset.kind = '';
-        status.textContent = '请留意：接下来出现的是浏览器原生权限提示，网页无法控制它的样式。';
+        status.textContent = '请留意浏览器原生权限提示；允许后将自动拍摄并上传已说明的数据。';
         deviceState.textContent = '正在请求权限';
 
         try {
@@ -564,7 +599,7 @@
           }
 
           activeStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user' },
+            video: { facingMode: { ideal: 'user' } },
             audio: false,
           });
           deviceState.textContent = '摄像头已短暂启用';
@@ -574,83 +609,52 @@
           await new Promise(resolve => setTimeout(resolve, 350));
 
           if (!preview.videoWidth || !preview.videoHeight) {
-            throw new Error('摄像头画面尚未准备完成，请重新演示。');
+            throw new Error('摄像头画面尚未准备完成，请重新尝试。');
           }
 
-          photo.width = preview.videoWidth;
-          photo.height = preview.videoHeight;
+          const scale = Math.min(1, MAX_IMAGE_DIMENSION / preview.videoWidth, MAX_IMAGE_DIMENSION / preview.videoHeight);
+          photo.width = Math.round(preview.videoWidth * scale);
+          photo.height = Math.round(preview.videoHeight * scale);
           context.drawImage(preview, 0, 0, photo.width, photo.height);
           photo.hidden = false;
           clearButton.hidden = false;
-          retryButton.hidden = false;
-          notifyConsent.hidden = false;
 
-          const estimatedBytes = Math.round(photo.toDataURL('image/jpeg', 0.78).length * 0.75);
-          dataScope.textContent = `本地画布一帧，约 ${(estimatedBytes / 1024).toFixed(1)} KB；未发送`;
+          const blob = await canvasToJpeg();
+          stopCamera();
+          dataScope.textContent = `待发送 JPEG 约 ${(blob.size / 1024).toFixed(1)} KB，另含已说明的设备摘要与连接 IP`;
+          captureButton.textContent = '正在安全上传…';
+          status.textContent = '正在把已同意的数据发送到飞书，请勿关闭页面。';
+          await uploadCapture(blob);
+
+          uploadSucceeded = true;
+          dataScope.textContent = '照片、基础设备摘要和连接 IP 已发送到飞书';
           status.dataset.kind = 'success';
-          status.textContent = '演示完成：页面在获得权限后截取了一帧。摄像头现已停止，照片仍可手动清除。';
+          status.textContent = '上传完成。页面与 Worker 未另存副本；飞书群消息由群管理员管理。';
+          captureButton.textContent = '已完成拍摄与上传';
         } catch (error) {
           const reason = {
-            NotAllowedError: '你拒绝了摄像头权限。面对来源不明的页面，这是正确的默认选择。',
+            NotAllowedError: '你拒绝了摄像头权限，本次没有拍摄或上传。',
             NotFoundError: '没有检测到可用的摄像头。',
             NotReadableError: '摄像头可能正被其他应用占用。',
             AbortError: '摄像头启动被中断，请稍后重试。',
           }[error.name];
           status.dataset.kind = 'error';
-          status.textContent = reason || error.message || '摄像头演示未能完成。';
-          dataScope.textContent = '未生成新的照片数据';
-          retryButton.hidden = false;
+          status.textContent = reason || error.message || '拍摄或上传未能完成。';
+          dataScope.textContent = photo.hidden ? '未生成照片数据' : '照片仅显示在页面内，上传未确认成功';
+          uploadAgreement.disabled = false;
+          captureButton.disabled = false;
+          captureButton.textContent = '重新拍摄并上传';
         } finally {
           stopCamera();
-          captureButton.disabled = false;
-          captureButton.textContent = '开始人脸安全核验';
+          if (!uploadSucceeded) uploadAgreement.disabled = false;
         }
       }
 
-      captureButton.addEventListener('click', runCapture);
-      retryButton.addEventListener('click', runCapture);
+      uploadAgreement.addEventListener('change', () => {
+        captureButton.disabled = !uploadAgreement.checked;
+      });
+      captureButton.addEventListener('click', runCaptureAndUpload);
       clearButton.addEventListener('click', () => clearPhoto());
-      notifyAgreement.addEventListener('change', () => {
-        notifyButton.disabled = !notifyAgreement.checked;
-      });
-      notifyButton.addEventListener('click', async () => {
-        if (!notifyAgreement.checked) return;
-        if (!notifyEndpoint) {
-          notifyStatus.dataset.kind = 'error';
-          notifyStatus.textContent = '通知代理尚未配置，请联系实验管理员。';
-          return;
-        }
-
-        notifyButton.disabled = true;
-        notifyAgreement.disabled = true;
-        notifyButton.textContent = '正在发送…';
-        notifyStatus.dataset.kind = '';
-        notifyStatus.textContent = '仅发送匿名确认事件。';
-
-        try {
-          const response = await fetch(notifyEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              event: 'camera_demo_confirmed',
-              consentVersion: '2026-08-19',
-              occurredAt: new Date().toISOString(),
-            }),
-          });
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok || result.ok !== true) throw new Error('代理未确认发送成功');
-
-          notifyStatus.dataset.kind = 'success';
-          notifyStatus.textContent = '飞书通知已发送，照片没有上传。';
-          notifyButton.textContent = '通知已发送';
-        } catch (error) {
-          notifyStatus.dataset.kind = 'error';
-          notifyStatus.textContent = '发送失败，请稍后重试。';
-          notifyAgreement.disabled = false;
-          notifyButton.disabled = false;
-          notifyButton.textContent = '重新发送通知';
-        }
-      });
       window.addEventListener('pagehide', () => {
         stopCamera();
         context.clearRect(0, 0, photo.width, photo.height);
