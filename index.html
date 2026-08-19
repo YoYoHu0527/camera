@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; connect-src 'self' https://*.workers.dev; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
+    <!-- 部署代理后，将 content 改为实际的 HTTPS Worker 地址。不要填写飞书 Webhook。 -->
+    <meta name="feishu-notify-endpoint" content="https://camera-feishu-notify.yoyo001.workers.dev/notify" />
     <meta name="theme-color" content="#07111f" />
-    <meta name="description" content="不上传数据的摄像头权限钓鱼反诈分析实验室。" />
+    <meta name="description" content="不上传照片的摄像头权限钓鱼反诈分析实验室。" />
     <title>镜鉴实验室｜摄像头权限钓鱼分析</title>
     <style>
       :root {
@@ -244,6 +246,21 @@
       .status { min-height: 1.5em; margin: 14px 0 0; color: #c3d2e1; line-height: 1.55; }
       .status[data-kind="success"] { color: var(--mint); }
       .status[data-kind="error"] { color: #ffb9bd; }
+      .notify-consent {
+        margin-top: 18px;
+        border: 1px solid rgba(104,228,255,.22);
+        border-radius: 14px;
+        padding: 16px;
+        background: rgba(104,228,255,.055);
+      }
+      .notify-consent h3 { margin: 0 0 8px; font-size: 15px; }
+      .notify-consent > p { margin: 0 0 13px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+      .consent-check { display: flex; gap: 10px; align-items: flex-start; color: #dbeaff; font-size: 13px; line-height: 1.55; cursor: pointer; }
+      .consent-check input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: #58d7ab; flex: 0 0 auto; }
+      .notify-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+      .notify-status { margin: 0 !important; font-size: 13px !important; }
+      .notify-status[data-kind="success"] { color: var(--mint); }
+      .notify-status[data-kind="error"] { color: #ffb9bd; }
 
       .analysis-card { padding: 22px; }
       .analysis-card h3 { margin: 0 0 18px; font-size: 17px; }
@@ -378,7 +395,7 @@
                   <li>话术：超时后将限制账户</li>
                 </ul>
                 <button class="bait-button" id="capture" type="button">开始人脸安全核验</button>
-                <p class="disclosure">反诈演示：按钮会触发真实浏览器权限请求，不会向服务器发送数据</p>
+                <p class="disclosure">反诈演示：拍照不会发送照片；完成后可另行确认是否发送匿名通知</p>
               </div>
 
               <div class="capture-stage" id="capture-stage" hidden>
@@ -391,6 +408,18 @@
                   <button class="btn btn-danger" id="clear" type="button" hidden>清除本地照片</button>
                   <button class="btn btn-quiet" id="retry" type="button" hidden>重新演示</button>
                 </div>
+                <div class="notify-consent" id="notify-consent" hidden>
+                  <h3>可选：通知研究人员</h3>
+                  <p>发送内容仅为“参与者已确认完成反诈实验”和当前时间，不包含照片、设备信息或页面输入。</p>
+                  <label class="consent-check">
+                    <input id="notify-agreement" type="checkbox" />
+                    <span>我已了解发送内容，并同意向该实验配置的飞书群机器人发送这条通知。</span>
+                  </label>
+                  <div class="notify-actions">
+                    <button class="btn btn-primary" id="notify" type="button" disabled>确认并通知飞书</button>
+                    <p class="notify-status" id="notify-status" role="status" aria-live="polite"></p>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -401,7 +430,7 @@
                 <div class="log-item"><span class="log-icon">B</span><div><dt>数据范围</dt><dd id="data-scope">尚未请求摄像头</dd></div></div>
                 <div class="log-item"><span class="log-icon">C</span><div><dt>设备状态</dt><dd id="device-state">未启用</dd></div></div>
               </dl>
-              <div class="network-lock">连接策略已锁定：页面 CSP 禁止 fetch、XHR、WebSocket 等对外连接。本页源码也不包含任何上传逻辑。</div>
+              <div class="network-lock">照片不会离开当前标签页。只有你完成演示并再次勾选同意后，页面才会向已配置的代理发送一条匿名飞书通知。</div>
             </aside>
           </div>
         </section>
@@ -465,7 +494,7 @@
           <div class="section-heading"><div><p class="eyebrow">Technical notes</p><h2 id="faq-title">技术分析补充</h2></div><p>用于讲解时，可以从浏览器安全模型、权限生命周期和网络边界三个方向展开。</p></div>
           <details><summary>网页能绕过摄像头授权弹窗吗？</summary><p>现代浏览器要求站点处于安全上下文，并由用户在浏览器原生界面中授权。网页不能用 CSS 改写这个原生提示，也不能替用户点击允许；社会工程攻击的重点是诱导用户主动授权。</p></details>
           <details><summary>授权后网站可以持续拍摄吗？</summary><p>只要页面仍持有活动的 MediaStreamTrack，就可能持续读取画面，浏览器通常会显示摄像头使用指示。本演示截取一帧后立即停止所有轨道，并清空 video 的 srcObject。</p></details>
-          <details><summary>本页为什么能够证明没有上传？</summary><p>页面不包含 fetch、XHR、WebSocket、表单提交或第三方资源；内容安全策略还把 connect-src 设置为 none。你可以在浏览器开发者工具的 Network 面板中独立核验。</p></details>
+          <details><summary>本页会向外发送什么？</summary><p>照片始终只保存在当前页面画布中。只有参与者在完成演示后再次勾选同意，页面才向配置的代理发送事件类型、同意版本和时间；代理再向飞书群机器人发送纯文本通知。你可以在浏览器开发者工具的 Network 面板中独立核验。</p></details>
         </section>
       </main>
 
@@ -482,6 +511,11 @@
       const status = document.querySelector('#status');
       const dataScope = document.querySelector('#data-scope');
       const deviceState = document.querySelector('#device-state');
+      const notifyConsent = document.querySelector('#notify-consent');
+      const notifyAgreement = document.querySelector('#notify-agreement');
+      const notifyButton = document.querySelector('#notify');
+      const notifyStatus = document.querySelector('#notify-status');
+      const notifyEndpoint = document.querySelector('meta[name="feishu-notify-endpoint"]').content.trim();
       const context = photo.getContext('2d');
       let activeStream = null;
 
@@ -501,6 +535,13 @@
         photo.height = 0;
         photo.hidden = true;
         clearButton.hidden = true;
+        notifyConsent.hidden = true;
+        notifyAgreement.checked = false;
+        notifyAgreement.disabled = false;
+        notifyButton.disabled = true;
+        notifyButton.textContent = '确认并通知飞书';
+        notifyStatus.textContent = '';
+        notifyStatus.dataset.kind = '';
         dataScope.textContent = '当前标签页内无照片数据';
         status.dataset.kind = 'success';
         status.textContent = message;
@@ -542,6 +583,7 @@
           photo.hidden = false;
           clearButton.hidden = false;
           retryButton.hidden = false;
+          notifyConsent.hidden = false;
 
           const estimatedBytes = Math.round(photo.toDataURL('image/jpeg', 0.78).length * 0.75);
           dataScope.textContent = `本地画布一帧，约 ${(estimatedBytes / 1024).toFixed(1)} KB；未发送`;
@@ -568,6 +610,47 @@
       captureButton.addEventListener('click', runCapture);
       retryButton.addEventListener('click', runCapture);
       clearButton.addEventListener('click', () => clearPhoto());
+      notifyAgreement.addEventListener('change', () => {
+        notifyButton.disabled = !notifyAgreement.checked;
+      });
+      notifyButton.addEventListener('click', async () => {
+        if (!notifyAgreement.checked) return;
+        if (!notifyEndpoint) {
+          notifyStatus.dataset.kind = 'error';
+          notifyStatus.textContent = '通知代理尚未配置，请联系实验管理员。';
+          return;
+        }
+
+        notifyButton.disabled = true;
+        notifyAgreement.disabled = true;
+        notifyButton.textContent = '正在发送…';
+        notifyStatus.dataset.kind = '';
+        notifyStatus.textContent = '仅发送匿名确认事件。';
+
+        try {
+          const response = await fetch(notifyEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'camera_demo_confirmed',
+              consentVersion: '2026-08-19',
+              occurredAt: new Date().toISOString(),
+            }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.ok !== true) throw new Error('代理未确认发送成功');
+
+          notifyStatus.dataset.kind = 'success';
+          notifyStatus.textContent = '飞书通知已发送，照片没有上传。';
+          notifyButton.textContent = '通知已发送';
+        } catch (error) {
+          notifyStatus.dataset.kind = 'error';
+          notifyStatus.textContent = '发送失败，请稍后重试。';
+          notifyAgreement.disabled = false;
+          notifyButton.disabled = false;
+          notifyButton.textContent = '重新发送通知';
+        }
+      });
       window.addEventListener('pagehide', () => {
         stopCamera();
         context.clearRect(0, 0, photo.width, photo.height);

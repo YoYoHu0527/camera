@@ -1,0 +1,9 @@
+name = "camera-feishu-notify"
+main = "feishu-notify.js"
+compatibility_date = "2026-08-19"
+
+[vars]
+ALLOWED_ORIGIN = "https://yoyohu0527.github.io"
+
+# FEISHU_WEBHOOK_URL 必须通过 `npx wrangler secret put FEISHU_WEBHOOK_URL`
+# 保存，禁止写入本文件或提交到 Git。
