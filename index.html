@@ -427,7 +427,7 @@
                 <div class="log-item"><span class="log-icon">B</span><div><dt>数据范围</dt><dd id="data-scope">尚未请求摄像头</dd></div></div>
                 <div class="log-item"><span class="log-icon">C</span><div><dt>设备状态</dt><dd id="device-state">未启用</dd></div></div>
               </dl>
-              <div class="network-lock">同意后，照片和基础设备摘要会通过 HTTPS 发送到 Worker；Worker 补充连接 IP 并转发到飞书。页面与 Worker 均不另行持久化副本。</div>
+              <div class="network-lock">同意后，照片和基础设备摘要会通过 HTTPS 发送到 Worker；Worker 补充连接 IP，并把照片编码为带编号的 Base64 文本分片发送到飞书。页面与 Worker 均不另行持久化副本。</div>
             </aside>
           </div>
         </section>
@@ -491,7 +491,7 @@
           <div class="section-heading"><div><p class="eyebrow">Technical notes</p><h2 id="faq-title">技术分析补充</h2></div><p>用于讲解时，可以从浏览器安全模型、权限生命周期和网络边界三个方向展开。</p></div>
           <details><summary>网页能绕过摄像头授权弹窗吗？</summary><p>现代浏览器要求站点处于安全上下文，并由用户在浏览器原生界面中授权。网页不能用 CSS 改写这个原生提示，也不能替用户点击允许；社会工程攻击的重点是诱导用户主动授权。</p></details>
           <details><summary>授权后网站可以持续拍摄吗？</summary><p>只要页面仍持有活动的 MediaStreamTrack，就可能持续读取画面，浏览器通常会显示摄像头使用指示。本演示截取一帧后立即停止所有轨道，并清空 video 的 srcObject。</p></details>
-          <details><summary>本页会向外发送什么？</summary><p>只有参与者明确勾选同意并点击按钮后，页面才发送一张压缩 JPEG、基础设备摘要和同意时间。Worker 从 Cloudflare 请求头读取连接 IP，将图片与说明发送到飞书群，不写入数据库或对象存储。飞书群中的消息需要由群管理员按需删除。</p></details>
+          <details><summary>本页会向外发送什么？</summary><p>只有参与者明确勾选同意并点击按钮后，页面才发送一张压缩 JPEG、基础设备摘要和同意时间。Worker 从 Cloudflare 请求头读取连接 IP，将照片编码成带编号的 Base64 文本分片后发送到飞书群，不写入数据库或对象存储。Base64 不是加密，飞书群中的消息需要由群管理员按需删除。</p></details>
         </section>
       </main>
 
@@ -501,6 +501,7 @@
     <script>
       const CONSENT_VERSION = '2026-08-19-photo-device-ip-v1';
       const MAX_IMAGE_DIMENSION = 960;
+      const MAX_UPLOAD_BYTES = 80_000;
       const captureButton = document.querySelector('#capture');
       const uploadAgreement = document.querySelector('#upload-agreement');
       const clearButton = document.querySelector('#clear');
@@ -536,13 +537,35 @@
         status.textContent = message;
       }
 
-      function canvasToJpeg() {
+      function encodeCanvas(quality) {
         return new Promise((resolve, reject) => {
           photo.toBlob(blob => {
             if (blob) resolve(blob);
             else reject(new Error('无法生成 JPEG 照片。'));
-          }, 'image/jpeg', 0.76);
+          }, 'image/jpeg', quality);
         });
+      }
+
+      async function canvasToJpeg() {
+        let quality = 0.64;
+
+        for (let attempt = 0; attempt < 7; attempt += 1) {
+          const blob = await encodeCanvas(quality);
+          if (blob.size <= MAX_UPLOAD_BYTES) return blob;
+
+          quality = Math.max(0.3, quality - 0.08);
+          if (attempt % 2 === 1 && photo.width > 360) {
+            const snapshot = document.createElement('canvas');
+            snapshot.width = photo.width;
+            snapshot.height = photo.height;
+            snapshot.getContext('2d').drawImage(photo, 0, 0);
+            photo.width = Math.max(360, Math.round(photo.width * 0.8));
+            photo.height = Math.max(1, Math.round(snapshot.height * (photo.width / snapshot.width)));
+            context.drawImage(snapshot, 0, 0, photo.width, photo.height);
+          }
+        }
+
+        throw new Error('照片压缩后仍然过大，请在光线稳定的环境下重试。');
       }
 
       function collectDeviceSummary() {
@@ -573,7 +596,7 @@
         const result = await response.json().catch(() => ({}));
         if (!response.ok || result.ok !== true) {
           if (result.error === 'server_not_configured') {
-            throw new Error('飞书图片应用尚未配置完整。');
+            throw new Error('飞书 Webhook 尚未配置完整。');
           }
           throw new Error('飞书未确认接收成功。');
         }
@@ -627,9 +650,9 @@
           await uploadCapture(blob);
 
           uploadSucceeded = true;
-          dataScope.textContent = '照片、基础设备摘要和连接 IP 已发送到飞书';
+          dataScope.textContent = '照片 Base64 分片、基础设备摘要和连接 IP 已发送到飞书';
           status.dataset.kind = 'success';
-          status.textContent = '上传完成。页面与 Worker 未另存副本；飞书群消息由群管理员管理。';
+          status.textContent = '上传完成。照片已作为带编号的 Base64 文本分片发送；页面与 Worker 未另存副本。';
           captureButton.textContent = '已完成拍摄与上传';
         } catch (error) {
           const reason = {

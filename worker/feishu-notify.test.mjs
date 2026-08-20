@@ -6,9 +6,7 @@ import worker from './feishu-notify.js';
 const origin = 'https://example.github.io';
 const env = {
   ALLOWED_ORIGIN: origin,
-  FEISHU_APP_ID: 'cli_test_app',
-  FEISHU_APP_SECRET: 'test-secret',
-  FEISHU_CHAT_ID: 'oc_test_chat',
+  FEISHU_WEBHOOK_URL: 'https://open.feishu.cn/open-apis/bot/v2/hook/test-webhook',
 };
 
 function uploadRequest({ mime = 'image/jpeg', signature = [0xff, 0xd8, 0xff, 0x00] } = {}) {
@@ -38,36 +36,54 @@ function uploadRequest({ mime = 'image/jpeg', signature = [0xff, 0xd8, 0xff, 0x0
   });
 }
 
-test('valid consent upload is forwarded to Feishu as an image post', async () => {
+test('valid upload sends metadata and reconstructable Base64 chunks to the webhook', async () => {
   const originalFetch = globalThis.fetch;
-  const calls = [];
+  const messages = [];
 
   globalThis.fetch = async (url, options) => {
-    calls.push({ url: String(url), options });
-
-    if (String(url).endsWith('/tenant_access_token/internal')) {
-      return Response.json({ code: 0, tenant_access_token: 'tenant-token' });
-    }
-    if (String(url).endsWith('/im/v1/images')) {
-      assert.equal(options.headers.Authorization, 'Bearer tenant-token');
-      assert.equal(options.body.get('image_type'), 'message');
-      return Response.json({ code: 0, data: { image_key: 'img_test' } });
-    }
-
-    const message = JSON.parse(options.body);
-    const content = JSON.parse(message.content);
-    assert.equal(message.receive_id, env.FEISHU_CHAT_ID);
-    assert.equal(message.msg_type, 'post');
-    assert.match(JSON.stringify(content), /img_test/);
-    assert.match(JSON.stringify(content), /203\.0\.113\.8/);
-    return Response.json({ code: 0, data: { message_id: 'om_test' } });
+    assert.equal(String(url), env.FEISHU_WEBHOOK_URL);
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.msg_type, 'text');
+    messages.push(payload.content.text);
+    return Response.json({ code: 0 });
   };
 
   try {
-    const response = await worker.fetch(uploadRequest(), env);
+    const originalBytes = new Uint8Array([0xff, 0xd8, 0xff, 0x00]);
+    const response = await worker.fetch(uploadRequest({ signature: originalBytes }), env);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ok: true });
-    assert.equal(calls.length, 3);
+    assert.equal(messages.length, 2);
+    assert.match(messages[0], /203\.0\.113\.8/);
+    assert.match(messages[0], /共 1 个分片/);
+
+    const encoded = messages[1].match(/DATA_BEGIN\n([A-Za-z0-9+/=]+)\nDATA_END/)[1];
+    assert.deepEqual(new Uint8Array(Buffer.from(encoded, 'base64')), originalBytes);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('large photos are split into ordered, reconstructable chunks', async () => {
+  const originalFetch = globalThis.fetch;
+  const messages = [];
+  globalThis.fetch = async (_url, options) => {
+    messages.push(JSON.parse(options.body).content.text);
+    return Response.json({ StatusCode: 0 });
+  };
+
+  try {
+    const originalBytes = new Uint8Array(20_000).fill(0x7a);
+    originalBytes.set([0xff, 0xd8, 0xff], 0);
+    const response = await worker.fetch(uploadRequest({ signature: originalBytes }), env);
+    assert.equal(response.status, 200);
+    assert.ok(messages.length > 2);
+
+    const encoded = messages
+      .slice(1)
+      .map(message => message.match(/DATA_BEGIN\n([A-Za-z0-9+/=]+)\nDATA_END/)[1])
+      .join('');
+    assert.deepEqual(new Uint8Array(Buffer.from(encoded, 'base64')), originalBytes);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -96,7 +112,7 @@ test('non-JPEG uploads are rejected before calling Feishu', async () => {
 
 test('declared oversized bodies are rejected', async () => {
   const request = uploadRequest();
-  request.headers.set('Content-Length', '1500001');
+  request.headers.set('Content-Length', '300001');
   const response = await worker.fetch(request, env);
   assert.equal(response.status, 413);
 });

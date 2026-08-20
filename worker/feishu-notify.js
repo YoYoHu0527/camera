@@ -1,8 +1,9 @@
 const CONSENT_VERSION = '2026-08-19-photo-device-ip-v1';
 const MAX_CLOCK_SKEW_MS = 10 * 60 * 1000;
-const MAX_REQUEST_BYTES = 1_500_000;
-const MAX_PHOTO_BYTES = 1_000_000;
+const MAX_REQUEST_BYTES = 300_000;
+const MAX_PHOTO_BYTES = 80_000;
 const MAX_DEVICE_BYTES = 2_048;
+const BASE64_CHUNK_CHARACTERS = 12_000;
 
 function corsHeaders(origin) {
   return {
@@ -122,81 +123,77 @@ async function parseUpload(request) {
   return { photo, device: sanitizeDevice(deviceRaw), occurredAt };
 }
 
-async function readFeishuJson(response, errorName) {
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.code !== 0) throw new Error(errorName);
-  return result;
+function bytesToBase64(bytes) {
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 8_192) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8_192));
+  }
+  return btoa(binary);
 }
 
-async function getTenantAccessToken(env) {
-  const response = await fetch('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+function splitText(value, size) {
+  const parts = [];
+  for (let offset = 0; offset < value.length; offset += size) {
+    parts.push(value.slice(offset, offset + size));
+  }
+  return parts;
+}
+
+function shortDelay() {
+  return new Promise(resolve => setTimeout(resolve, 250));
+}
+
+async function sendWebhookText(webhook, text) {
+  const response = await fetch(webhook, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
     body: JSON.stringify({
-      app_id: env.FEISHU_APP_ID,
-      app_secret: env.FEISHU_APP_SECRET,
+      msg_type: 'text',
+      content: { text },
     }),
   });
-  const result = await readFeishuJson(response, 'token_rejected');
-  if (typeof result.tenant_access_token !== 'string' || !result.tenant_access_token) {
-    throw new Error('token_missing');
-  }
-  return result.tenant_access_token;
+  const result = await response.json().catch(() => ({}));
+  const accepted = result.code === 0 || result.StatusCode === 0;
+  if (!response.ok || !accepted) throw new Error('webhook_rejected');
 }
 
-async function uploadFeishuImage(token, photo) {
-  const form = new FormData();
-  form.append('image_type', 'message');
-  form.append('image', photo, 'consented-camera-photo.jpg');
+async function sendUploadToFeishu(webhook, upload, ipAddress) {
+  const uploadId = crypto.randomUUID();
+  const bytes = new Uint8Array(await upload.photo.arrayBuffer());
+  const base64 = bytesToBase64(bytes);
+  const parts = splitText(base64, BASE64_CHUNK_CHARACTERS);
+  const device = upload.device;
 
-  const response = await fetch('https://open.feishu.cn/open-apis/im/v1/images', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
-  });
-  const result = await readFeishuJson(response, 'image_rejected');
-  const imageKey = result.data?.image_key;
-  if (typeof imageKey !== 'string' || !imageKey) throw new Error('image_key_missing');
-  return imageKey;
-}
-
-async function sendFeishuMessage(token, chatId, imageKey, occurredAt, device, ipAddress) {
-  const content = {
-    zh_cn: {
-      title: '[反诈实验] 已同意的摄像头上传',
-      content: [
-        [{ tag: 'text', text: '参与者已明确同意上传以下数据。' }],
-        [{ tag: 'img', image_key: imageKey }],
-        [{ tag: 'text', text: `确认时间：${new Date(occurredAt).toISOString()}` }],
-        [{ tag: 'text', text: `连接 IP：${ipAddress}` }],
-        [{ tag: 'text', text: `设备：${device.platform} · ${device.language} · ${device.timezone}` }],
-        [
-          {
-            tag: 'text',
-            text: `屏幕：${device.screen.width}×${device.screen.height} @ ${device.screen.pixelRatio}x`,
-          },
-        ],
-        [{ tag: 'text', text: `浏览器：${device.userAgent}` }],
-      ],
-    },
-  };
-
-  const response = await fetch(
-    'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: JSON.stringify({
-        receive_id: chatId,
-        msg_type: 'post',
-        content: JSON.stringify(content),
-      }),
-    },
+  await sendWebhookText(
+    webhook,
+    [
+      '[反诈实验] 已同意的摄像头上传',
+      `照片编号：${uploadId}`,
+      `确认时间：${new Date(upload.occurredAt).toISOString()}`,
+      `连接 IP：${ipAddress}`,
+      `设备：${device.platform} · ${device.language} · ${device.timezone}`,
+      `屏幕：${device.screen.width}×${device.screen.height} @ ${device.screen.pixelRatio}x`,
+      `浏览器：${device.userAgent}`,
+      `照片格式：image/jpeg;base64，共 ${parts.length} 个分片`,
+      '请按分片序号拼接 DATA_BEGIN 与 DATA_END 之间的字符。',
+    ].join('\n'),
   );
-  await readFeishuJson(response, 'message_rejected');
+  await shortDelay();
+
+  for (let index = 0; index < parts.length; index += 1) {
+    await sendWebhookText(
+      webhook,
+      [
+        '[反诈实验] 照片 Base64 分片',
+        `照片编号：${uploadId}`,
+        `分片：${index + 1}/${parts.length}`,
+        'DATA_BEGIN',
+        parts[index],
+        'DATA_END',
+      ].join('\n'),
+    );
+    if (index < parts.length - 1) await shortDelay();
+  }
 }
 
 export default {
@@ -217,10 +214,8 @@ export default {
       return json({ ok: false, error: 'method_not_allowed' }, 405, origin);
     }
 
-    const appId = (env.FEISHU_APP_ID || '').trim();
-    const appSecret = (env.FEISHU_APP_SECRET || '').trim();
-    const chatId = (env.FEISHU_CHAT_ID || '').trim();
-    if (!appId || !appSecret || !chatId) {
+    const webhook = (env.FEISHU_WEBHOOK_URL || '').trim();
+    if (!webhook.startsWith('https://open.feishu.cn/open-apis/bot/v2/hook/')) {
       return json({ ok: false, error: 'server_not_configured' }, 503, origin);
     }
 
@@ -235,19 +230,7 @@ export default {
     const ipAddress = cleanText(request.headers.get('CF-Connecting-IP'), 64);
 
     try {
-      const token = await getTenantAccessToken({
-        FEISHU_APP_ID: appId,
-        FEISHU_APP_SECRET: appSecret,
-      });
-      const imageKey = await uploadFeishuImage(token, upload.photo);
-      await sendFeishuMessage(
-        token,
-        chatId,
-        imageKey,
-        upload.occurredAt,
-        upload.device,
-        ipAddress,
-      );
+      await sendUploadToFeishu(webhook, upload, ipAddress);
       return json({ ok: true }, 200, origin);
     } catch {
       return json({ ok: false, error: 'feishu_unavailable' }, 502, origin);

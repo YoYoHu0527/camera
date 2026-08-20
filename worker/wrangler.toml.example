@@ -6,8 +6,5 @@ compatibility_date = "2026-08-19"
 # GitHub Pages 的完整来源，不要以斜杠结尾。
 ALLOWED_ORIGIN = "https://YOUR-NAME.github.io"
 
-# 不要在此文件中填写飞书应用参数。
-# 使用以下命令保存为 Worker secret：
-# npx wrangler secret put FEISHU_APP_ID
-# npx wrangler secret put FEISHU_APP_SECRET
-# npx wrangler secret put FEISHU_CHAT_ID
+# 不要在此文件中填写飞书 Webhook。
+# 使用 `npx wrangler secret put FEISHU_WEBHOOK_URL` 保存为 Worker secret。

@@ -5,7 +5,5 @@ compatibility_date = "2026-08-19"
 [vars]
 ALLOWED_ORIGIN = "https://yoyohu0527.github.io"
 
-# 飞书应用参数必须通过 Wrangler secret 保存，禁止写入本文件或提交到 Git：
-# npx wrangler secret put FEISHU_APP_ID
-# npx wrangler secret put FEISHU_APP_SECRET
-# npx wrangler secret put FEISHU_CHAT_ID
+# 飞书群自定义机器人地址必须通过 Wrangler secret 保存，禁止写入本文件或提交到 Git：
+# npx wrangler secret put FEISHU_WEBHOOK_URL

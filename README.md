@@ -10,7 +10,7 @@
 - 截取一帧后立即停止摄像头；页面仅保留预览，刷新或手动清除即可移除本地预览
 - Worker 只做校验和转发，不使用数据库、KV 或对象存储保存数据
 - 连接 IP 由 Cloudflare 的受信请求头读取，不接受网页自行提交的 IP
-- 照片和摘要会进入指定飞书群，后续保留与删除受飞书群消息策略控制
+- 照片会编码成带编号的 Base64 文本分片，连同设备摘要进入指定飞书群；Base64 不是加密
 - 仅用于已授权的安全研究、反诈培训与技术分析
 
 ## 部署
@@ -19,26 +19,32 @@
 
 ## 配置飞书通知
 
-图片上传不能只使用原来的群自定义机器人 Webhook。本项目改用飞书企业自建应用机器人：Worker 先取得应用访问凭证、上传图片，再向指定群发送包含照片、设备摘要和 IP 的富文本消息。应用密钥只保存在 Cloudflare Worker secret 中。
+本项目复用飞书群自定义机器人 Webhook。页面会把 JPEG 压缩到最多约 80 KB；Worker 再编码为 Base64，并拆成带照片编号和分片序号的多条文本消息。第一条消息包含设备摘要、连接 IP、时间和总分片数。Webhook 只保存在 Cloudflare Worker secret 中。
 
-1. 在飞书开放平台创建企业自建应用，启用机器人能力。
-2. 为应用开通上传图片和以机器人身份发送消息所需权限（`im:resource`、`im:message:send_as_bot`），发布应用，并把应用机器人加入接收消息的群。
-3. 获取应用的 App ID、App Secret 和目标群 Chat ID。不要把 App Secret 粘贴到聊天、源码或 Git 仓库。
-4. `worker/wrangler.toml` 已按本仓库配置为 `https://yoyohu0527.github.io`。如果以后改用自定义域名，再同步修改 `ALLOWED_ORIGIN`，末尾不要加斜杠。
-5. 在 `worker` 目录依次执行以下命令，并在提示中输入对应值：
+1. 在接收消息的飞书群中添加自定义机器人，建议把安全关键词设为 `[反诈实验]`。
+2. `worker/wrangler.toml` 已按本仓库配置为 `https://yoyohu0527.github.io`。如果以后改用自定义域名，再同步修改 `ALLOWED_ORIGIN`，末尾不要加斜杠。
+3. 在 `worker` 目录执行以下命令，并在提示中输入 Webhook 地址：
 
    ```powershell
-   npx wrangler secret put FEISHU_APP_ID
-   npx wrangler secret put FEISHU_APP_SECRET
-   npx wrangler secret put FEISHU_CHAT_ID
+   npx wrangler secret put FEISHU_WEBHOOK_URL
    ```
 
-6. 执行 `npx wrangler deploy`。当前前端已指向 `https://camera-feishu-notify.yoyo001.workers.dev/notify`；若 Worker 地址变化，再修改 `index.html` 中 `feishu-notify-endpoint` 的 `content`。
-7. 新流程验证成功后，旧的 Webhook secret 已不再使用，可以执行 `npx wrangler secret delete FEISHU_WEBHOOK_URL` 删除。
+4. 执行 `npx wrangler deploy`。当前前端已指向 `https://camera-feishu-notify.yoyo001.workers.dev/notify`；若 Worker 地址变化，再修改 `index.html` 中 `feishu-notify-endpoint` 的 `content`。
+
+## 还原照片
+
+在飞书中找到同一个“照片编号”的全部分片，按照 `1/N` 到 `N/N` 排序，只复制每条消息中 `DATA_BEGIN` 与 `DATA_END` 之间的字符并连续拼接。将结果保存为 `photo-base64.txt`，然后执行：
+
+```powershell
+$base64 = (Get-Content -Raw -Encoding UTF8 .\photo-base64.txt) -replace '\s', ''
+[IO.File]::WriteAllBytes((Join-Path (Get-Location) 'photo.jpg'), [Convert]::FromBase64String($base64))
+```
+
+生成的 `photo.jpg` 就是还原后的照片。Base64 只是二进制文本编码，任何能看到这些群消息的人都可以还原照片。
 
 如果 Worker 使用自定义域名，还需要把该域名加入 `index.html` 的 CSP `connect-src`。生产使用时建议在 Worker 平台额外开启速率限制。
 
-飞书参考：[获取 tenant_access_token](https://open.feishu.cn/document/server-docs/authentication-management/access-token/tenant_access_token_internal)、[上传图片](https://open.feishu.cn/document/server-docs/im-v1/image/create)、[发送消息](https://open.feishu.cn/document/server-docs/im-v1/message/create)。Cloudflare IP 来源参考：[HTTP 请求头](https://developers.cloudflare.com/fundamentals/reference/http-headers/)。
+飞书参考：[使用自定义机器人发送消息](https://open.feishu.cn/document/common-capabilities/message-card/getting-started/send-message-cards-with-a-custom-bot?lang=zh-CN)。Cloudflare IP 来源参考：[HTTP 请求头](https://developers.cloudflare.com/fundamentals/reference/http-headers/)。
 
 ## 本地查看
 
